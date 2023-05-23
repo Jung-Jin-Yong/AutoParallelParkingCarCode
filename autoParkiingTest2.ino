@@ -8,15 +8,16 @@ Servo myServo;
 
 int leftFrontUltra, leftBackUltra, backLeftUltra, backRightUltra, frontLeftUltra, frontRightUltra;
 int angle = 90;
-NewPing Uf1(4, 5);  // 오른쪽 전방 센서 Trig, Echo
-NewPing Uf2(6, 7);  //오른쪽 후방 센서
+int moveDirection = 0; // 0 : 정지, 1 : 전진, -1 : 후진
+NewPing Uf1(4, 5);  // 왼쪽 전방 센서 Trig, Echo
+NewPing Uf2(6, 7);  // 왼쪽 후방 센서
 NewPing Uf3_L(8, 9);  //후방 좌측 센서
 NewPing Uf3_R(12, 13); //후방 우측 센서
 NewPing Uf4_L(10, 11); // 전방 좌측 센서
 NewPing Uf4_R(2, 3); //전방 우측 센서
 
-void advance(int velocity);
-void backUp(int velocity);
+void advance(int velocityA);
+void backUp(int velocityB);
 void stopCar();
 void turnLeft();
 void turnRight();
@@ -36,7 +37,7 @@ void loop() {
   // put your main code here, to run repeatedly:
   delay(1000);
   //1. 전진하면서 주차공간 파악
-  advance(255);
+  advance(240);
   while(1){
     leftFrontUltra = Uf1.ping_cm();
     leftBackUltra = Uf2.ping_cm();
@@ -54,7 +55,8 @@ void loop() {
 
   Serial.println("1차 체크");
   //2. 멈추고 조금 더 전진
-  advance(255);
+  //turnRightSmall();
+  advance(220);
   while(1){
     Serial.println("2차 체크");
     leftFrontUltra = Uf1.ping_cm();
@@ -73,7 +75,7 @@ void loop() {
   //3. 멈추고 좌회전 꺾고 후진
   Serial.println("3차 체크");
   turnLeft();
-  backUp(220);
+  backUp(180);
   while(1){
     leftFrontUltra = Uf1.ping_cm();
     if(leftFrontUltra >= 18){
@@ -86,13 +88,15 @@ void loop() {
   // 4. 휠 중립 후 살짝 뒤로 후진
   Serial.println("4차 체크");
   turnNeutral();
-  backUp(240);
+  backUp(200);
+  delay(200);
+  stopCar();
   /*
   backUp(180);
   delay(400);
   stopCar();
   */
-  
+  /*
   while(1){
     backLeftUltra = Uf3_L.ping_cm();
     backRightUltra = Uf3_R.ping_cm();
@@ -100,18 +104,19 @@ void loop() {
     Serial.print(backLeftUltra);
     Serial.print(" ");
     Serial.print(backRightUltra);
-    if((backRightUltra + backLeftUltra) / 2<= 12 && backRightUltra * backLeftUltra != 0){ // 0으로 튀는거 우회 방법
+    if((backRightUltra + backLeftUltra) / 2 <= 15 && backRightUltra * backLeftUltra != 0){ // 0으로 튀는거 우회 방법
       stopCar();
       break;
     }
     
   }
+  */
   
   
   // 5. 우회전 꺾고 다시 후진
   Serial.println("5차 체크");
   turnRight();
-  backUp(240);
+  backUp(255);
   while(1){
     backLeftUltra = Uf3_L.ping_cm();
     backRightUltra = Uf3_R.ping_cm();
@@ -129,7 +134,7 @@ void loop() {
   
   // 6. 전방 우측 센서 거리 10 밑으로 될때까지 차량 자세 재조정
   Serial.println("6차 체크");
-  turnLeft();
+  turnLeftSmall();
   advance(255);
   while(1){
     frontLeftUltra = Uf4_L.ping_cm();
@@ -138,23 +143,23 @@ void loop() {
     Serial.print(frontLeftUltra);
     Serial.print(" ");
     Serial.println(frontRightUltra);
-    if((frontLeftUltra + frontRightUltra) / 2 <= 3 && frontLeftUltra * frontRightUltra != 0){
+    if(frontLeftUltra <= 2 && frontLeftUltra * frontRightUltra != 0){
       stopCar();
       break;
     }
   }
-  /*
-  turnRight();
+  
+  turnRightSmall();
   backUp(210);
   while(1){
     backLeftUltra = Uf3_L.ping_cm();
     backRightUltra = Uf3_R.ping_cm();
-    if((backLeftUltra + backRightUltra) / 2 <= 3 && backLeftUltra * backRightUltra != 0){
-      stopCar();
+    if(backLeftUltra <= 1 && backLeftUltra * backRightUltra != 0){
+      smallBraking();
       break;
     }
   }
-  */
+  
   // 7. 휠 중립으로 두고 마무리
   Serial.println("5차 체크");
   turnNeutral();
@@ -163,28 +168,62 @@ void loop() {
 }
 
 // 함수 파트
-void advance(int velocity){ // 차량 전진
+void advance(int velocityA){ // 차량 전진
   Serial.println("전진");
-  analogWrite(speedPin, velocity);
+  moveDirection = 1;
+  analogWrite(speedPin, velocityA);
   digitalWrite(MOTB, HIGH);
   digitalWrite(MOTA, LOW);  
 }
 
-void backUp(int velocity){ //차량 후진
+void backUp(int velocityB){ //차량 후진
   Serial.println("후진");
-  analogWrite(speedPin, velocity);
+  moveDirection = -1;
+  analogWrite(speedPin, velocityB);
   digitalWrite(MOTB, LOW);
   digitalWrite(MOTA, HIGH);  
 }
 
 void stopCar(){ // 정차
+  if(moveDirection == 1){
+    backUp(255);
+    delay(100);
+  }
+  else if(moveDirection == -1){
+    advance(255);
+    delay(120);
+  }
+  moveDirection = 0;
+  analogWrite( speedPin , 0 );
+  digitalWrite(MOTB, LOW);
+  digitalWrite(MOTA, LOW);
+}
+
+void smallBraking(){ // 정차
+  if(moveDirection == 1){
+    backUp(255);
+    delay(50);
+  }
+  else if(moveDirection == -1){
+    advance(255);
+    delay(50);
+  }
+  moveDirection = 0;
   analogWrite( speedPin , 0 );
   digitalWrite(MOTB, LOW);
   digitalWrite(MOTA, LOW);
 }
 
 void turnLeft(){
-  while( angle >= 47){
+  while( angle >= 60){
+    myServo.write(angle);
+    angle -= 1;
+    delay(100);
+  }
+}
+
+void turnLeftSmall(){
+  while( angle >= 75){
     myServo.write(angle);
     angle -= 1;
     delay(100);
@@ -192,7 +231,15 @@ void turnLeft(){
 }
 
 void turnRight(){
-  while( angle <= 133){
+  while( angle <= 120){
+    myServo.write(angle);
+    angle += 1;
+    delay(100);
+  }
+}
+
+void turnRightSmall(){
+  while( angle <= 100){
     myServo.write(angle);
     angle += 1;
     delay(100);
